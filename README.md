@@ -122,18 +122,3 @@ Update the system prompt in \`app/api/chat/route.ts\` to include new categories.
 
 ### Modifying AI Behavior
 Adjust the system prompt to change how the AI interacts with users or what information it collects.
-
-### Styling Changes
-Modify Tailwind classes throughout the components or update the theme in \`tailwind.config.ts\`.
-
-## Production Considerations
-
-For a production deployment, consider:
-- Database integration (PostgreSQL, MongoDB, etc.)
-- User authentication and authorization
-- Real-time notifications for support techs
-- Email notifications for ticket updates
-- File attachment support
-- Advanced analytics and reporting
-- Rate limiting for API endpoints
-- Error handling and logging
