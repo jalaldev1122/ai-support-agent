@@ -1,124 +1,62 @@
 # AI Support Agent
 
-A customer support application that serves both end users and support technicians with AI-powered ticket creation and management.
+An AI-guided support desk with two sides. Customers chat with an assistant that collects everything a support ticket needs. Support techs work the resulting tickets on a drag-and-drop Kanban board.
 
-## Features
+**Stack:** Next.js 14 (App Router) · TypeScript · Vercel AI SDK · OpenAI GPT-4o · Zustand · dnd-kit · shadcn/ui · Tailwind CSS
 
-### End User Interface
-- **AI-Guided Chat**: Interactive chat interface with an AI assistant
-- **Smart Ticket Creation**: AI guides users through gathering all necessary information
-- **Category Detection**: Automatic categorization of issues with deduplication
-- **Priority Assessment**: AI suggests appropriate priority levels based on issue severity
+---
 
-### Support Tech Interface
-- **Dashboard Overview**: Statistics and metrics for all support tickets
-- **Advanced Filtering**: Search and filter tickets by status, category, and keywords
-- **Ticket Management**: Update ticket status (Open → In Progress → Resolved)
-- **Real-time Updates**: Tickets are updated in real-time across the interface
+## The problem
 
-### AI Assistant Capabilities
-- Collects user name and email
-- Determines issue category from predefined list
-- Assesses priority level (low, medium, high)
-- Generates concise ticket titles
-- Gathers detailed problem descriptions
-- Creates structured support tickets
+Support tickets often arrive incomplete. There's no email, no category and a vague title, so a tech has to go back and forth with the customer before any work can start. This app moves that intake step into a conversation. The assistant asks one question at a time, suggests a category and priority for the user to confirm, and only creates the ticket once every field is filled in.
 
-## Technology Stack
+## How it works
 
-- **Frontend**: Next.js 14 with App Router, React, TypeScript
-- **UI Components**: shadcn/ui with Tailwind CSS
-- **AI Integration**: AI SDK with OpenAI GPT-4
-- **State Management**: React hooks with localStorage persistence
-- **Icons**: Lucide React
+```
+Customer ──chat──▶ /api/chat ──▶ GPT-4o (guided system prompt)
+                                     │
+                     replies until all fields are collected, then emits
+                     TICKET_CREATED:{ name, email, category, priority, title, description }
+                                     │
+      chat page parses the payload ◀─┘
+                 │
+                 ▼
+     Zustand store (persisted) ──▶ Dashboard: stats + Kanban (Open → In Progress → Resolved)
+```
 
-## Getting Started
+- **Guided intake.** The system prompt in `app/api/chat/route.ts` sets a fixed order: issue, name, email, suggested category, suggested priority, title. The user confirms the AI's suggestions, so the model never decides on its own.
+- **Structured output.** When intake is done, the model replies with a `TICKET_CREATED:{...}` JSON payload. The chat page pulls it out and turns it into a typed `Ticket` (`lib/types/ticket.ts`). Free-form chat and machine-readable data share one channel without needing a second API call.
+- **Shared state.** Tickets live in a Zustand store with `persist` middleware (`lib/stores/ticket-store.ts`), so the chat and the dashboard read the same data and it survives a reload.
+- **Tech dashboard.** It shows summary stats, search and category filters, a ticket details modal and a Kanban board built on dnd-kit, where moving a card changes the ticket's status.
 
-### Prerequisites
-- Node.js 18+ 
-- npm or yarn
-- OpenAI API key
+## Getting started
 
-### Installation
+```bash
+pnpm install
+echo "OPENAI_API_KEY=sk-..." > .env.local
+pnpm dev
+```
 
-1. **Clone or download the project files**
+Open http://localhost:3000, choose **Start Chat** to file a ticket, then **View Dashboard** to work it.
 
-2. **Install dependencies**
-   \`\`\`bash
-   pnpm install
-   \`\`\`
+## Project structure
 
-3. **Set up environment variables**
-   Create a \`.env\` file in the root directory:
-   \`\`\`
-   OPENAI_API_KEY=your_openai_api_key_here
-   \`\`\`
+```
+app/
+  api/chat/route.ts        Guided-intake chat endpoint
+  api/tickets/route.ts     Ticket API
+  chat/page.tsx            Customer chat; parses TICKET_CREATED payloads
+  dashboard/page.tsx       Tech dashboard with Kanban board
+components/dashboard/      Ticket card, Kanban column, stats, details modal
+lib/stores/ticket-store.ts Persisted Zustand store
+lib/types/ticket.ts        Ticket model
+```
 
-4. **Run the development server**
-   \`\`\`bash
-   pnpm dev
-   \`\`\`
+## Trade-offs and next steps
 
-5. **Open your browser**
-   Navigate to [http://localhost:3000](http://localhost:3000)
+This is a demo, so storage is client-side. To take it to production I would:
 
-## Usage
-
-### For End Users
-1. Visit the homepage and click "Start Chat"
-2. Describe your issue to the AI assistant
-3. Follow the AI's guidance to provide all necessary details
-4. Receive a ticket confirmation with tracking ID
-
-### For Support Technicians
-1. Visit the homepage and click "View Dashboard"
-2. Review all submitted tickets with filtering options
-3. Update ticket statuses as work progresses
-4. Use search and category filters to manage workload
-
-## Project Structure
-
-\`\`\`
-├── app/
-│   ├── api/
-│   │   ├── chat/route.ts          # AI chat endpoint
-│   │   └── tickets/route.ts       # Ticket management API
-│   ├── chat/page.tsx              # End user chat interface
-│   ├── dashboard/page.tsx         # Support tech dashboard
-│   └── page.tsx                   # Landing page
-├── components/
-│   └── ui/                        # shadcn/ui components
-└── README.md
-\`\`\`
-
-## Key Features Implementation
-
-### AI-Powered Conversation Flow
-The AI assistant uses a structured system prompt to guide users through ticket creation:
-- Asks one question at a time to avoid overwhelming users
-- Validates and acknowledges provided information
-- Suggests appropriate priority levels based on issue type
-- Creates structured tickets when all information is collected
-
-### Smart Category Management
-- Predefined categories: Technical Issue, Account Problem, Billing Question, Feature Request, Bug Report, General Inquiry
-- AI automatically selects the most appropriate category
-- Categories are deduplicated in the dashboard interface
-
-### Responsive Design
-- Mobile-friendly interface for both user types
-- Clean, professional design with intuitive navigation
-- Real-time updates and loading states
-
-### Data Persistence
-- Uses localStorage for demo purposes
-- In production, would integrate with a proper database
-- Tickets persist across browser sessions
-
-## Customization
-
-### Adding New Categories
-Update the system prompt in \`app/api/chat/route.ts\` to include new categories.
-
-### Modifying AI Behavior
-Adjust the system prompt to change how the AI interacts with users or what information it collects.
+- Move tickets to Postgres behind `api/tickets`, and push board updates to all techs over WebSockets or SSE.
+- Replace the text sentinel with the AI SDK's tool calling and a Zod schema, so ticket fields are validated before they're saved and not parsed out of the reply text.
+- Stream responses (`streamText`) for faster first-token latency in the chat.
+- Check for duplicate tickets against a customer's existing open tickets before creating a new one.
